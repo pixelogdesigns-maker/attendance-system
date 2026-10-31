@@ -14,6 +14,7 @@ const locationEventSchema = new mongoose.Schema(
     distanceFromOfficeMeters: Number,
     classification: { type: String, enum: ['inside', 'outside', 'buffer', 'uncertain'] },
     eventType: { type: String, enum: ['check_in', 'sample', 'departure', 'return'], default: 'sample' },
+    method: { type: String, enum: ['wifi', 'gps'], default: 'gps' },
     source: { type: String, enum: ['android_app', 'web'], default: 'web' },
   },
   { timestamps: { createdAt: true, updatedAt: false } },

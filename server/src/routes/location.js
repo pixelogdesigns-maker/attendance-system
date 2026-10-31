@@ -2,19 +2,20 @@ import { Router } from 'express';
 import { AttendanceRecord } from '../models/AttendanceRecord.js';
 import { LocationEvent } from '../models/LocationEvent.js';
 import { HttpError } from '../middleware/errorHandler.js';
-import { parseReading } from '../middleware/validate.js';
 import { raiseAlert } from '../services/alertService.js';
 import { isWithinMonitoringWindow, monitoringDisplay } from '../services/attendanceRulesService.js';
 import { nextDepartureState } from '../services/departureDetectionService.js';
-import { classifyReading } from '../services/geofenceService.js';
 import { officeForUser } from '../services/officeService.js';
+import { classifyPresence, eventFields } from '../services/presenceService.js';
 import { localParts } from '../utils/dateTime.js';
 
 export const locationRouter = Router();
 
+// Minimum gap between counted readings, so a burst of pings cannot trigger an alert on its own.
+const MIN_READING_GAP_MS = 30 * 1000;
+
 locationRouter.post('/', async (req, res) => {
   const office = await officeForUser(req.user);
-  const reading = parseReading(req.body);
   const now = new Date();
   const { workDate } = localParts(now, office.timezone);
 
@@ -24,16 +25,16 @@ locationRouter.post('/', async (req, res) => {
     throw new HttpError(409, 'Monitoring is not active. Please check in first.');
   }
 
-  if (!isWithinMonitoringWindow(office, now)) {
-    return res.json({ accepted: false, display: monitoringDisplay(record, office, now) });
-  }
+  const presence = classifyPresence(office, req, now);
+  const notCounted = () => res.json({ accepted: false, display: monitoringDisplay(record, office, now) });
 
-  // Drop readings that arrive out of order.
-  if (record.lastDeviceTimestamp && reading.timestamp <= record.lastDeviceTimestamp) {
-    return res.json({ accepted: false, display: monitoringDisplay(record, office, now) });
-  }
+  if (!isWithinMonitoringWindow(office, now)) return notCounted();
+  if (record.lastReadingAt && now - record.lastReadingAt < MIN_READING_GAP_MS) return notCounted();
+  // Drop GPS readings that arrive out of order.
+  const deviceTime = presence.reading?.timestamp;
+  if (deviceTime && record.lastDeviceTimestamp && deviceTime <= record.lastDeviceTimestamp) return notCounted();
 
-  const { distance, classification } = classifyReading(office, reading, now);
+  const { classification, distance } = presence;
   const { state, event } = nextDepartureState(
     {
       locationState: record.locationState,
@@ -46,24 +47,18 @@ locationRouter.post('/', async (req, res) => {
 
   record.set(state);
   record.lastReadingAt = now;
-  record.lastDeviceTimestamp = reading.timestamp;
+  if (deviceTime) record.lastDeviceTimestamp = deviceTime;
   record.lastClassification = classification;
-  record.lastDistanceMeters = distance;
+  record.lastDistanceMeters = distance ?? undefined;
   if (event === 'departure') record.departureCount += 1;
   await record.save(); // optimistic concurrency: a conflicting request gets 409
 
   await LocationEvent.create({
     employeeId: req.user._id,
     attendanceRecordId: record._id,
-    receivedAt: now,
-    deviceTimestamp: reading.timestamp,
-    latitude: reading.latitude,
-    longitude: reading.longitude,
-    accuracyMeters: reading.accuracyMeters,
-    distanceFromOfficeMeters: distance,
+    ...eventFields(req, presence),
     classification,
     eventType: event || 'sample',
-    source: reading.source,
   });
 
   if (event === 'departure' || (event === 'return' && office.sendReturnAlerts)) {

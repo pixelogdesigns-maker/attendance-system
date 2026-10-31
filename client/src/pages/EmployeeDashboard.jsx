@@ -13,6 +13,10 @@ export default function EmployeeDashboard() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const sendingRef = useRef(false);
+  const usesGps = office?.checkMethod === 'gps';
+
+  // Wi-Fi offices need nothing from the phone: the server checks which network the request came from.
+  const presenceBody = useCallback(async () => (usesGps ? getReading() : {}), [usesGps]);
 
   const load = useCallback(async () => {
     const [today, past] = await Promise.all([api('/attendance/today'), api('/attendance/history')]);
@@ -23,8 +27,11 @@ export default function EmployeeDashboard() {
 
   useEffect(() => {
     load().catch((err) => setError(err.message));
-    permissionState().then(setPermission);
   }, [load]);
+
+  useEffect(() => {
+    if (usesGps) permissionState().then(setPermission);
+  }, [usesGps]);
 
   const monitoring = record && !record.checkOutAt && record.monitoringStatus === 'active';
 
@@ -33,18 +40,21 @@ export default function EmployeeDashboard() {
     if (sendingRef.current) return;
     sendingRef.current = true;
     try {
-      const reading = await getReading();
-      const result = await api('/location-events', { method: 'POST', body: reading });
+      const body = await presenceBody();
+      const result = await api('/location-events', { method: 'POST', body });
       setRecord((r) => (r ? { ...r, display: result.display, lastReadingAt: result.accepted ? new Date().toISOString() : r.lastReadingAt } : r));
-      setPermission('granted');
-      setError('');
+      setError(
+        result.accepted && result.classification === 'outside' && !usesGps
+          ? 'You are not on the office Wi-Fi. Connect to it and turn off mobile data.'
+          : '',
+      );
     } catch (err) {
       setError(err.message);
-      permissionState().then(setPermission);
+      if (usesGps) permissionState().then(setPermission);
     } finally {
       sendingRef.current = false;
     }
-  }, []);
+  }, [presenceBody, usesGps]);
 
   useEffect(() => {
     if (!monitoring || !office) return undefined;
@@ -60,13 +70,12 @@ export default function EmployeeDashboard() {
   async function checkIn() {
     setBusy(true);
     setError('');
-    setMessage('Getting your location…');
+    setMessage(usesGps ? 'Getting your location…' : 'Checking the office Wi-Fi…');
     try {
-      const reading = await getReading();
-      const data = await api('/attendance/check-in', { method: 'POST', body: reading });
+      const body = await presenceBody();
+      const data = await api('/attendance/check-in', { method: 'POST', body });
       setRecord(data.record);
       setOffice(data.office);
-      setPermission('granted');
       setMessage(data.record.late ? 'Checked in (late).' : 'Checked in. Have a good day!');
       load().catch(() => {});
     } catch (err) {
@@ -78,7 +87,7 @@ export default function EmployeeDashboard() {
   }
 
   async function checkOut() {
-    if (!window.confirm('Check out for today? Location monitoring will stop.')) return;
+    if (!window.confirm('Check out for today? Attendance checks will stop.')) return;
     setBusy(true);
     setError('');
     try {
@@ -104,8 +113,8 @@ export default function EmployeeDashboard() {
         </div>
         {office && (
           <p className="muted">
-            {office.name} · work hours {office.monitoringStartLocal} to {office.monitoringEndLocal} · check-in within{' '}
-            {office.radiusMeters} m
+            {office.name} · work hours {office.monitoringStartLocal} to {office.monitoringEndLocal} ·{' '}
+            {usesGps ? `check-in within ${office.radiusMeters} m` : 'check in on the office Wi-Fi'}
           </p>
         )}
 
@@ -117,21 +126,23 @@ export default function EmployeeDashboard() {
             <dd>{formatTime(record.checkOutAt, office?.timezone)}</dd>
             {monitoring && (
               <>
-                <dt>Last location update</dt>
+                <dt>Last check</dt>
                 <dd>{lastUpdate === null ? '–' : lastUpdate === 0 ? 'just now' : `${lastUpdate} min ago`}</dd>
               </>
             )}
           </dl>
         ) : null}
 
-        {permission === 'denied' && (
+        {usesGps && permission === 'denied' && (
           <p className="error">
             Location is blocked for this site. Open your browser's site settings and allow location, then reload.
           </p>
         )}
         {monitoring && (
           <p className="notice">
-            Keep this page open during work hours so your attendance stays confirmed. Your location is only checked
+            {usesGps
+              ? 'Keep this page open during work hours so your attendance stays confirmed. Your location is only checked'
+              : 'Stay on the office Wi-Fi and keep this page open during work hours. Your connection is only checked'}{' '}
             between {office?.monitoringStartLocal} and {office?.monitoringEndLocal}, and never after you check out.
           </p>
         )}
@@ -146,7 +157,7 @@ export default function EmployeeDashboard() {
         )}
         {monitoring && (
           <div className="row">
-            <button type="button" onClick={sendReading} disabled={busy}>Update location now</button>
+            <button type="button" onClick={sendReading} disabled={busy}>Check again now</button>
             <button type="button" className="danger" onClick={checkOut} disabled={busy}>Check out</button>
           </div>
         )}
@@ -174,7 +185,7 @@ export default function EmployeeDashboard() {
           </table>
         )}
         <p className="muted small">
-          Location readings and alerts are deleted after 1 month. Updated {formatDateTime(new Date(), office?.timezone)}.
+          Check history and alerts are deleted after 1 month. Updated {formatDateTime(new Date(), office?.timezone)}.
         </p>
       </section>
     </main>

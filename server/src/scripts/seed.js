@@ -9,17 +9,15 @@ import { User } from '../models/User.js';
 
 await connectDatabase(env.mongodbUri);
 
-const latitude = Number(process.env.OFFICE_LAT);
-const longitude = Number(process.env.OFFICE_LNG);
-if (!process.env.OFFICE_LAT || !process.env.OFFICE_LNG || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-  console.error('Set OFFICE_LAT and OFFICE_LNG in .env to the office coordinates.');
-  process.exit(1);
-}
+// Coordinates are optional: the office checks presence by Wi-Fi unless switched to GPS.
+const latitude = process.env.OFFICE_LAT ? Number(process.env.OFFICE_LAT) : undefined;
+const longitude = process.env.OFFICE_LNG ? Number(process.env.OFFICE_LNG) : undefined;
 
 let office = await Office.findOne();
 if (!office) {
   office = await Office.create({ name: process.env.OFFICE_NAME || 'Main office', latitude, longitude });
-  console.log(`Created office "${office.name}" (radius ${office.radiusMeters} m, ${office.monitoringStartLocal} to ${office.monitoringEndLocal} ${office.timezone}).`);
+  console.log(`Created office "${office.name}" (${office.monitoringStartLocal} to ${office.monitoringEndLocal} ${office.timezone}).`);
+  console.log('Next: sign in as the owner while connected to the office Wi-Fi and add it in Settings.');
 } else {
   console.log(`Office "${office.name}" already exists, leaving it unchanged.`);
 }
