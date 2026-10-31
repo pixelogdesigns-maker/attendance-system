@@ -8,6 +8,9 @@ function required(name) {
 
 export const env = {
   port: Number(process.env.PORT || 4000),
+  // Number of proxies in front of the server (1 for most hosts). Needed to read the real client IP
+  // for the office Wi-Fi check; too high a value lets clients fake their address.
+  trustProxy: Number(process.env.TRUST_PROXY ?? 1),
   mongodbUri: required('MONGODB_URI'),
   authSecret: required('AUTH_SECRET'),
   clientOrigins: (process.env.CLIENT_ORIGIN || 'http://localhost:5173')

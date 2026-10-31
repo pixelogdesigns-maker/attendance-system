@@ -91,3 +91,9 @@ th { color: var(--muted); font-weight: 600; }
 .error { color: var(--bad); margin: 0; }
 .success { color: var(--good); margin: 0; }
 .notice { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-size: 0.9rem; }
+select {
+  font: inherit; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); color: var(--text);
+}
+.plain-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; overflow-wrap: anywhere; }

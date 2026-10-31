@@ -2,8 +2,7 @@ import { Router } from 'express';
 import { AttendanceRecord } from '../models/AttendanceRecord.js';
 import { LocationEvent } from '../models/LocationEvent.js';
 import { HttpError } from '../middleware/errorHandler.js';
-import { parseReading } from '../middleware/validate.js';
-import { checkInAllowed } from '../services/geofenceService.js';
+import { assertCanCheckIn, eventFields } from '../services/presenceService.js';
 import { isAfterWorkEnd, isLateCheckIn, monitoringDisplay } from '../services/attendanceRulesService.js';
 import { officeForUser } from '../services/officeService.js';
 import { localParts } from '../utils/dateTime.js';
@@ -28,6 +27,7 @@ function serializeRecord(record, office, now = new Date()) {
 function officeSettingsForClient(office) {
   return {
     name: office.name,
+    checkMethod: office.checkMethod,
     radiusMeters: office.radiusMeters,
     sampleIntervalSeconds: office.sampleIntervalSeconds,
     monitoringStartLocal: office.monitoringStartLocal,
@@ -38,7 +38,6 @@ function officeSettingsForClient(office) {
 
 attendanceRouter.post('/check-in', async (req, res) => {
   const office = await officeForUser(req.user);
-  const reading = parseReading(req.body);
   const now = new Date();
 
   if (isAfterWorkEnd(office, now)) {
@@ -48,8 +47,7 @@ attendanceRouter.post('/check-in', async (req, res) => {
   const existing = await AttendanceRecord.findOne({ employeeId: req.user._id, workDate });
   if (existing) throw new HttpError(409, 'You have already checked in today.');
 
-  const check = checkInAllowed(office, reading, now);
-  if (!check.allowed) throw new HttpError(400, check.message);
+  const presence = assertCanCheckIn(office, req, now);
 
   const late = isLateCheckIn(office, now);
   const record = await AttendanceRecord.create({
@@ -60,22 +58,16 @@ attendanceRouter.post('/check-in', async (req, res) => {
     late,
     status: late ? 'late' : 'present',
     lastReadingAt: now,
-    lastDeviceTimestamp: reading.timestamp,
+    lastDeviceTimestamp: presence.reading?.timestamp,
     lastClassification: 'inside',
-    lastDistanceMeters: check.distance,
+    lastDistanceMeters: presence.distance ?? undefined,
   });
   await LocationEvent.create({
     employeeId: req.user._id,
     attendanceRecordId: record._id,
-    receivedAt: now,
-    deviceTimestamp: reading.timestamp,
-    latitude: reading.latitude,
-    longitude: reading.longitude,
-    accuracyMeters: reading.accuracyMeters,
-    distanceFromOfficeMeters: check.distance,
+    ...eventFields(req, { ...presence, classification: 'inside' }),
     classification: 'inside',
     eventType: 'check_in',
-    source: reading.source,
   });
   res.status(201).json({ record: serializeRecord(record, office, now), office: officeSettingsForClient(office) });
 });

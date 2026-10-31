@@ -10,6 +10,7 @@ import { pick, requireString } from '../middleware/validate.js';
 import { monitoringDisplay } from '../services/attendanceRulesService.js';
 import { officeForUser } from '../services/officeService.js';
 import { localParts } from '../utils/dateTime.js';
+import { isIpAllowed, networkEntryFor, normalizeIp } from '../utils/network.js';
 
 export const ownerRouter = Router();
 
@@ -121,11 +122,21 @@ ownerRouter.patch('/attendance/:id', async (req, res) => {
 });
 
 const OFFICE_FIELDS = [
-  'name', 'latitude', 'longitude', 'radiusMeters', 'outsideBufferMeters', 'insideBufferMeters',
+  'name', 'checkMethod', 'officeNetworks', 'latitude', 'longitude', 'radiusMeters', 'outsideBufferMeters', 'insideBufferMeters',
   'maxAcceptedAccuracyMeters', 'staleReadingSeconds', 'outsideReadingsRequired',
   'insideReadingsRequired', 'sampleIntervalSeconds', 'noUpdateMinutes', 'lateAfterMinutes',
   'timezone', 'monitoringStartLocal', 'monitoringEndLocal', 'sendReturnAlerts',
 ];
+
+// The internet address the owner is connecting from, so they can add it as the office Wi-Fi.
+ownerRouter.get('/network', async (req, res) => {
+  const office = await officeForUser(req.user);
+  res.json({
+    ip: normalizeIp(req.ip),
+    entry: networkEntryFor(req.ip),
+    onOfficeNetwork: isIpAllowed(req.ip, office.officeNetworks),
+  });
+});
 
 ownerRouter.get('/offices', async (_req, res) => {
   res.json({ offices: await Office.find().sort({ createdAt: 1 }).lean() });

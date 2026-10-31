@@ -96,9 +96,9 @@ function TodayView() {
           </table>
         </div>
         <p className="muted small">
-          "Outside office" means several reliable GPS readings put the phone outside the office area. "No recent update"
-          usually means the page was closed or the phone lost signal; it is not counted as leaving. Please confirm with the
-          employee before acting on any alert.
+          "Outside office" means the phone checked in from outside the office several times in a row (off the office Wi-Fi,
+          or outside the GPS area). "No recent update" usually means the page was closed or the phone lost signal; it is not
+          counted as leaving. Please confirm with the employee before acting on any alert.
         </p>
       </section>
 
