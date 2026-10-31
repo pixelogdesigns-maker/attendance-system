@@ -22,9 +22,13 @@ export default function LoginPage({ onLogin }) {
   }
 
   return (
-    <main className="page narrow">
-      <h1>Office Attendance</h1>
-      <form className="card stack" onSubmit={submit}>
+    <main className="login">
+      <form className="card stack login-card" onSubmit={submit}>
+        <div className="login-head">
+          <span className="brand-mark big-mark" aria-hidden="true">✓</span>
+          <h1>Office Attendance</h1>
+          <p className="muted">Sign in to check in or see your team.</p>
+        </div>
         <label>
           Email
           <input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />

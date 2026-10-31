@@ -12,7 +12,17 @@ export function statusLabel(display) {
   return (LABELS[display] || [display])[0];
 }
 
+export function statusTone(display) {
+  return (LABELS[display] || [display, 'muted'])[1];
+}
+
 export default function StatusBadge({ display }) {
   const [label, tone] = LABELS[display] || [display, 'muted'];
-  return <span className={`badge badge-${tone}`}>{label}</span>;
+  const live = display === 'active' || display === 'returned' || display === 'possible_outside';
+  return (
+    <span className={`badge badge-${tone}`}>
+      <span className={live ? 'dot dot-live' : 'dot'} aria-hidden="true" />
+      {label}
+    </span>
+  );
 }

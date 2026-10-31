@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../services/api.js';
 import { getReading, permissionState } from '../services/location.js';
 import StatusBadge from '../components/StatusBadge.jsx';
+import LiveClock from '../components/LiveClock.jsx';
 import { formatDateTime, formatTime, minutesAgo } from '../format.js';
 
 export default function EmployeeDashboard() {
@@ -106,11 +107,16 @@ export default function EmployeeDashboard() {
 
   return (
     <main className="page narrow">
-      <section className="card stack">
-        <div className="row-between">
-          <h2>Today</h2>
-          <StatusBadge display={record?.display || 'not_checked_in'} />
+      <section className="hero hero-compact">
+        <div className="hero-text">
+          <p className="hero-kicker">{office?.name || 'Office Attendance'}</p>
+          <LiveClock timeZone={office?.timezone} />
         </div>
+        <StatusBadge display={record?.display || 'not_checked_in'} />
+      </section>
+
+      <section className="card stack rise">
+        <h2>Today</h2>
         {office && (
           <p className="muted">
             {office.name} · work hours {office.monitoringStartLocal} to {office.monitoringEndLocal} ·{' '}
@@ -147,13 +153,21 @@ export default function EmployeeDashboard() {
           </p>
         )}
 
-        {message && <p className="success">{message}</p>}
+        {message && (
+          <p className="success pop" key={message}>
+            {record && !record.checkOutAt && <span className="check-mark" aria-hidden="true">✓</span>}
+            {message}
+          </p>
+        )}
         {error && <p className="error">{error}</p>}
 
         {!record && (
-          <button type="button" className="primary big" onClick={checkIn} disabled={busy}>
-            {busy ? 'Checking…' : 'Check in'}
-          </button>
+          <div className="checkin-wrap">
+            <button type="button" className={busy ? 'checkin-button busy' : 'checkin-button'} onClick={checkIn} disabled={busy}>
+              <span className="checkin-icon" aria-hidden="true">{busy ? '…' : '➜'}</span>
+              {busy ? 'Checking…' : 'Check in'}
+            </button>
+          </div>
         )}
         {monitoring && (
           <div className="row">
@@ -163,12 +177,12 @@ export default function EmployeeDashboard() {
         )}
       </section>
 
-      <section className="card">
+      <section className="card rise" style={{ '--i': 1 }}>
         <h2>My attendance</h2>
         {history.length === 0 ? (
           <p className="muted">No records yet.</p>
         ) : (
-          <table>
+          <div className="table-wrap"><table>
             <thead>
               <tr><th>Date</th><th>In</th><th>Out</th><th>Note</th></tr>
             </thead>
@@ -182,7 +196,7 @@ export default function EmployeeDashboard() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
         <p className="muted small">
           Check history and alerts are deleted after 1 month. Updated {formatDateTime(new Date(), office?.timezone)}.
